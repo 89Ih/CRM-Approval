@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.0.0/dist/css/bootstrap.min.css"
+        integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+    <script defer src="https://code.jquery.com/jquery-3.2.1.slim.min.js"
+        integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/popper.js@1.12.9/dist/umd/popper.min.js"
+        integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@4.0.0/dist/js/bootstrap.min.js"
+        integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <title>Approvment</title>
+    <style>
+        body {
+            height: 100vh;
+            width: 100%;
+            display: grid;
+            place-items: center;
+        }
+    </style>
+</head>
+
+<body>
+    <main class="w-100 d-flex flex-column justify-content-center align-items-center pr-5 pl-5">
+        <button type="button" onclick="refresh()">Refresh</button>
+        <table class="table table-hover border">
+            <thead>
+                <tr>
+                    <th scope="col">#</th>
+                    <th scope="col">Name</th>
+                    <th scope="col">Result</th>
+                    <th scope="col">Approval</th>
+                    <th scope="col">Tow-Stage approval</th>
+                    <th scope="col">Statusgrund</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Approver</th>
+                </tr>
+            </thead>
+            <tbody id="main-content">
+
+            </tbody>
+            <tfoot>
+                <tr>
+                    <th colspan="8">
+                        <div class="d-flex flex-row justify-content-end align-items-center pr-3 ">
+                            <div class="form-check mr-5">
+                                <input class="form-check-input" type="radio" name="exampleRadios" id="approveId"
+                                    value="approve" checked>
+                                <label class="form-check-label" for="approveId">
+                                    Approve
+                                </label>
+                            </div>
+                            <div class="form-check mr-2">
+                                <input class="form-check-input" type="radio" name="exampleRadios" id="rejectId"
+                                    value="reject">
+                                <label class="form-check-label" for="rejectId">
+                                    Reject
+                                </label>
+                            </div>
+                            <div class="form-check ">
+                                <button id="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr" type="button" class="btn btn-primary"
+                                    disabled onclick="updateRecord()">Submit</button>
+                            </div>
+                        </div>
+                    </th>
+                </tr>
+            </tfoot>
+        </table>
+
+    </main>
+    <script>
+        const { Page, WebApi } = window.parent.Xrm;
+        const submitButton = document.getElementById("sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr");
+        const mainContent = document.getElementById("main-content");
+
+        window.onload = async () => {
+            await retrieveApprovements();
+
+            // Delegate event listener to parent instead of binding to each checkbox
+            mainContent.addEventListener("change", (event) => {
+                event.preventDefault()
+                if (event.target.type === "checkbox") {
+                    handleCheckboxChange(event.target);
+                }
+            });
+        };
+
+        /** Handle checkbox change (only one selected at a time) */
+        const handleCheckboxChange = (clicked) => {
+            const checkboxes = mainContent.querySelectorAll('input[type="checkbox"]');
+
+            checkboxes.forEach(cb => {
+                if (cb !== clicked) cb.checked = false;
+            });
+
+            if (submitButton) {
+                submitButton.disabled = !clicked.checked;
+            }
+
+            console.log("Selected:", clicked.value);
+
+        };
+
+        /** Get selected record GUID */
+        const getRecordId = () => {
+            const selected = mainContent.querySelector('input[type="checkbox"]:checked');
+            return selected ? selected.value : null;
+        };
+
+        /** Update record (placeholder logic) */
+        const updateRecord = () => {
+            let result;
+            const GUID = getRecordId();
+            if (GUID) {
+                ["approveId", "rejectId"].forEach(id => {
+                    const inputRadio = document.getElementById(id);
+                    if (inputRadio.checked) {
+                        result = inputRadio.value;
+                    }
+                });
+                if (GUID && result) {
+                    WebApi.updateRecord("pr_approvement", GUID, { pr_result: result, statecode: 1 }).then(
+                        () => refresh(),
+                        (err) => console.log(err.message)
+                    );
+                }
+            } else {
+                console.log("No checkbox selected");
+            }
+        };
+
+        /** Load approvements and render table */
+        const retrieveApprovements = async () => {
+            try {
+                const currentRecordId = Page.data.entity.getId().replace(/[{}]/g, "").toLowerCase();
+
+                const entityName = Page.data.entity.getEntityName();
+
+                const query = `?$filter=pr_entitytragetguid eq '${currentRecordId}' and pr_entitytraget eq '${entityName}'`;
+
+                const response = await WebApi.retrieveMultipleRecords("pr_approvement", query);
+
+                if (response.entities.length > 0) {
+                    mainContent.innerHTML = response.entities.map(ele => {
+                        return `
+                        <tr>
+                            <th scope="row">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" value="${ele.pr_approvementid}" ${ele["pr_result"] ? "disabled" : ''} >
+                                </div>
+                            </th>
+                            <th>${ele["pr_name"] || ""}</th>
+                            <td>${ele["pr_result"] || ""}</td>
+                            <td>${ele["_pr_approvel_value@OData.Community.Display.V1.FormattedValue"] || ""}</td>
+                            <td>${ele["pr_twostageapproval@OData.Community.Display.V1.FormattedValue"] || ""}</td>
+                            <td>${ele["statuscode@OData.Community.Display.V1.FormattedValue"] || ""}</td>
+                            <td>${ele["statecode@OData.Community.Display.V1.FormattedValue"] || ""}</td>
+                            <td>${ele["_ownerid_value@OData.Community.Display.V1.FormattedValue"] || ""}</td>
+                        </tr>`;
+                    }).join('');
+                } else {
+                    mainContent.innerHTML = `<tr><td colspan="8">No approvements found</td></tr>`;
+                }
+            } catch (err) {
+                console.error("Error retrieving approvements:", err);
+            }
+        };
+
+        /** Refresh page */
+        const refresh = () => window.location.reload();
+
+    </script>
+
+
+</body>
+
+</html>

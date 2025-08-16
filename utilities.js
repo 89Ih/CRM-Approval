@@ -36,7 +36,8 @@ function restService() {
         },
         create: async function (entityName, data) {
             return safeExecute(async () => {
-                await Xrm.WebApi.createRecord(entityName, data);
+                const response = await Xrm.WebApi.createRecord(entityName, data);
+                return response;
                 // setNotification("Record created successfully", "INFO", "randemId");
             });
         }

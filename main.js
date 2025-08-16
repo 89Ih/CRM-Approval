@@ -1,4 +1,4 @@
-const APPROVE_STATUS_FIELDS = ["pr_worktimemodel_set", "pr_entry_set"];
+const APPROVE_STATUS_FIELDS = ["pr_m1decision", "pr_m2decision"];
 const api = restService();
 
 function onLoad(executionContext) {
@@ -9,6 +9,10 @@ function onLoad(executionContext) {
 
     if (isValid) {
         handleAgreement(formContext);
+
+    } else {
+
+
     }
 }
 function onChange(executionContext) {
@@ -28,9 +32,9 @@ function handleAgreement(formContext) {
     const agreementTypeAttr = formContext.getAttribute("pr_customeragreement");
     const agreementType = agreementTypeAttr.getValue();
     if (agreementType) {
-        getApproval(formContext);
         switch (agreementType) {
             case 125620000:
+                objectCondition(formContext)
                 console.log("Payment");
                 break;
             case 125620001:
@@ -44,19 +48,21 @@ function handleAgreement(formContext) {
         console.log("agreement not defined");
     }
 }
+function objectCondition(formContext) {
+    const approver = "8dcd51ee-c93b-ec11-8c61-00224813d3d5";
+    createSecondApprove(formContext, approver, approver)
+}
 async function getApproval(formContext) {
     const id = getRecordId(formContext);
 
-    const data = await api.getAll(
-        "pr_approvement",
-        `?$filter=pr_entitytragetguid eq '${id}'`
-    );
+    const data = await api.getAll("pr_approvement", `?$filter=pr_entitytragetguid eq '${id}'`);
 
     return (data && data.length > 0)
         ? data
-        : await createApproval(formContext);
+        : []
 }
-async function createApproval(formContext) {
+async function createApproval(formContext, approver) {
+    const OPEN = 125620000;
     const id = getRecordId(formContext);
     const entityName = formContext.data.entity.getEntityName();
     const jobTitle = formContext.getAttribute("pr_jobtitle")?.getValue();
@@ -65,13 +71,15 @@ async function createApproval(formContext) {
         pr_name: jobTitle,
         pr_entitytraget: entityName,
         pr_entitytragetguid: id,
+        "ownerid@odata.bind": `/systemusers(${approver})`
+
     };
 
     await api.create("pr_approvement", data);
-    await updateReleaseStatus(formContext);
+
 }
-async function updateReleaseStatus(formContext) {
-    const OPEN = 125620000;
+async function updateReleaseStatus(formContext, stateKey) {
+
     const releaseMap = {
         125620000: "pr_mdecision",
         125620001: "pr_m1decision",
@@ -81,9 +89,53 @@ async function updateReleaseStatus(formContext) {
     const release = formContext.getAttribute("pr_requiredrelease")?.getValue();
 
     if (release && releaseMap[release]) {
-        formContext.getAttribute(releaseMap[release]).setValue(OPEN);
+        formContext.getAttribute(releaseMap[release]).setValue(stateKey);
     }
 }
+function createSecondApprove(formContext, approver1, approver2) {
+    const currentRecordId = getRecordId(formContext);
+    const entityName = formContext.data.entity.getEntityName();
+    const jobTitle = formContext.getAttribute("pr_jobtitle")?.getValue();
+
+    const record1 = {
+        pr_name: "Erste Freigabe - " + jobTitle,
+        pr_entitytraget: entityName,
+        pr_entitytragetguid: currentRecordId,
+        pr_twostageapproval: true,
+        "ownerid@odata.bind": `/systemusers(${approver1})`
+    };
+    api.create("pr_approvement", record1)
+        .then(({ id, entityType }) => {
+            if (id) {
+                return api.create(entityType, {
+                    pr_name: "Zweite Freigabe - " + jobTitle,
+                    pr_entitytraget: entityName,
+                    pr_entitytragetguid: currentRecordId,
+                    "pr_Approvel@odata.bind": `/pr_approvements(${id})`,
+                    "ownerid@odata.bind": `/systemusers(${approver2})`
+                });
+            }
+        })
+        .catch(err => {
+            console.error("Error creating record:", err);
+        });
+
+
+
+}
+
+
 function getRecordId(formContext) {
     return formContext.data.entity.getId().replace(/[{}]/g, "").toLowerCase();
 }
+function getLookupId(formContext, fieldName) {
+    const lookup = formContext.getAttribute(fieldName)?.getValue();
+    return lookup && lookup.length > 0
+        ? lookup[0].id.replace(/[{}]/g, "").toLowerCase()
+        : null;
+}
+
+
+// const isOneRejected = ["pr_m1decision", "pr_m2decision"].some((field) => {
+//     return formContext.getAttribute(field)?.getValue() === 125620002;
+// });
