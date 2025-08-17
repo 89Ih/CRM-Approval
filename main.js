@@ -96,13 +96,16 @@ function createSecondApprove(formContext, approver1, approver2) {
     const currentRecordId = getRecordId(formContext);
     const entityName = formContext.data.entity.getEntityName();
     const jobTitle = formContext.getAttribute("pr_jobtitle")?.getValue();
+    const clientUrl = Xrm.Utility.getGlobalContext().getClientUrl();
+
 
     const record1 = {
         pr_name: "Erste Freigabe - " + jobTitle,
         pr_entitytraget: entityName,
         pr_entitytragetguid: currentRecordId,
         pr_twostageapproval: true,
-        "ownerid@odata.bind": `/systemusers(${approver1})`
+        "ownerid@odata.bind": `/systemusers(${approver1})`,
+        pr_recordurl: `${clientUrl}/main.aspx?etn=${entityName}&id=${currentRecordId}&pagetype=entityrecord`
     };
     api.create("pr_approvement", record1)
         .then(({ id, entityType }) => {
@@ -112,7 +115,8 @@ function createSecondApprove(formContext, approver1, approver2) {
                     pr_entitytraget: entityName,
                     pr_entitytragetguid: currentRecordId,
                     "pr_Approvel@odata.bind": `/pr_approvements(${id})`,
-                    "ownerid@odata.bind": `/systemusers(${approver2})`
+                    "ownerid@odata.bind": `/systemusers(${approver2})`,
+                    pr_recordurl: `${clientUrl}/main.aspx?etn=${entityName}&id=${currentRecordId}&pagetype=entityrecord`
                 });
             }
         })
@@ -135,7 +139,19 @@ function getLookupId(formContext, fieldName) {
         : null;
 }
 
+function getRecordUrl() {
+    // Get entity name (logical name)
+    var entityName = Xrm.Page.data.entity.getEntityName();
 
-// const isOneRejected = ["pr_m1decision", "pr_m2decision"].some((field) => {
-//     return formContext.getAttribute(field)?.getValue() === 125620002;
-// });
+    // Get record ID (remove curly braces if needed)
+    var recordId = Xrm.Page.data.entity.getId().replace("{", "").replace("}", "");
+
+    // Build record URL
+    var recordUrl = Xrm.Page.context.getClientUrl() +
+        "/main.aspx?etn=" + entityName +
+        "&id=" + recordId +
+        "&pagetype=entityrecord";
+
+    console.log("Record URL:", recordUrl);
+    return recordUrl;
+}
