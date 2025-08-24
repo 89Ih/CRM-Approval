@@ -158,25 +158,27 @@
             return result.entities;
         };
         /** Render a table row for a single approvement */
-        const renderRow = (ele) => `
-    <tr>
-        <th scope="row">
-            <div class="form-check">
-                <input class="form-check-input" type="checkbox" value="${ele.pr_approvementid}" ${ele["pr_result"] ? "disabled" : ""}>
-            </div>
-        </th>
-        <th>${ele["pr_name"] || ""}</th>
-        <td>${ele["pr_result"] || ""}</td>
-        <td>${ele["_pr_approvel_value@OData.Community.Display.V1.FormattedValue"] || ""}</td>
-        <td>${ele["pr_twostageapproval@OData.Community.Display.V1.FormattedValue"] || ""}</td>
-        <td>${ele["statuscode@OData.Community.Display.V1.FormattedValue"] || ""}</td>
-        <td>${ele["statecode@OData.Community.Display.V1.FormattedValue"] || ""}</td>
-        <td>${ele["_ownerid_value@OData.Community.Display.V1.FormattedValue"] || ""}</td>
-    </tr>
-`;
+        const renderRow = (ele) =>
+            `<tr>
+            <th scope="row">
+                <div class="form-check">
+                    <input 
+                     class="form-check-input" 
+                     type="checkbox" 
+                     value="${ele.pr_approvementid}" 
+                     ${ele["pr_result"] ? "disabled" : ""}>
+                </div>
+            </th>
+            <th>${ele["pr_name"] || ""}</th>
+            <td>${ele["pr_result"] || ""}</td>
+            <td>${ele["_pr_approvel_value@OData.Community.Display.V1.FormattedValue"] || ""}</td>
+            <td>${ele["pr_twostageapproval@OData.Community.Display.V1.FormattedValue"] || ""}</td>
+            <td>${ele["statuscode@OData.Community.Display.V1.FormattedValue"] || ""}</td>
+            <td>${ele["statecode@OData.Community.Display.V1.FormattedValue"] || ""}</td>
+            <td>${ele["_ownerid_value@OData.Community.Display.V1.FormattedValue"] || ""}</td>
+        </tr>`;
 
         const refresh = () => window.location.reload();
-
         /**
          * Retrieve assigned approvement record
          * @param {string} guid - The GUID of the approvement record
@@ -184,7 +186,7 @@
          */
         const retrieveAssignedRecord = async (guid) => {
             try {
-                const query = "?$expand=pr_approvement_Approvel_pr_approvement($select=pr_approvementid,_pr_approvel_value,_ownerid_value)";
+                const query = "?$expand=pr_approvement_Approvel_pr_approvement($select=pr_approvementid,_pr_approvel_value,_ownerid_value,)";
                 const res = await WebApi.retrieveRecord("pr_approvement", guid, query);
 
                 const expanded = res?.pr_approvement_Approvel_pr_approvement?.[0];
@@ -197,9 +199,9 @@
                     firstOwnerName: res["_ownerid_value@OData.Community.Display.V1.FormattedValue"],
                     firstOwnerId: res["_ownerid_value"],
                     recordUrl: res["pr_recordurl"],
-                    secondApprovalName: expanded.pr_name ?? "",
+                    secondApprovalName: expanded["pr_name"],
                     secondOwnerName: expanded["_ownerid_value@OData.Community.Display.V1.FormattedValue"] ?? "",
-                    secondOwnerId: expanded._ownerid_value ?? null
+                    secondOwnerId: expanded["_ownerid_value"]
                 };
             } catch (error) {
                 console.error("Failed to retrieve assigned record:", error.message ?? error);
@@ -232,14 +234,14 @@
 
                 const related = await retrieveAssignedRecord(GUID);
                 if (related?.secondOwnerId) {
-                    await sendMail({
+                    await createMail({
                         sender: related.firstOwnerId,
                         torecipient: related.secondOwnerId,
                         subject: related.secondApprovalName,
                         description: buildMailDescription(related)
                     });
                 }
-
+                updateCustomerAgreementStatus();
                 refresh();
             } catch (err) {
                 console.error("Failed to update record:", err.message ?? err);
@@ -247,25 +249,26 @@
         };
 
         /** Build approval mail body */
-        const buildMailDescription = ({ secondApprovalName, secondOwnerName, firstOwnerName, recordUrl }) => `
-    Subject: Approval Request: ${secondApprovalName}
-
-    Hello ${secondOwnerName},
-
-    A new approval request requires your attention:
-
-        • Item: ${secondApprovalName}
-        • Requested by: ${firstOwnerName}
-        • Purpose: [Short description]
-
-    Please review and approve at your earliest convenience:
-    👉 <a href="${recordUrl}" target="_blank" rel="noopener noreferrer">Open Record</a>
-
-    Thank you
-`;
+        const buildMailDescription = ({ secondApprovalName, secondOwnerName, firstOwnerName, recordUrl }) =>
+            `Subject: Approval Request: ${secondApprovalName}</br>
+            </br>
+            Hello ${secondOwnerName},</br>
+            </br>
+            A new approval request requires your attention:
+            </br>
+            </br>
+            <ul>
+                <li>Item: ${secondApprovalName}</li>
+                <li>Requested by: ${firstOwnerName}</li>
+                <li>Purpose: [Short description]</li>
+            </ul>
+            Please review and approve at your earliest convenience:
+            👉 <a href="${recordUrl}" target="_blank" rel="noopener noreferrer">Open Record</a></br>
+            </br>
+            Thank you`;
 
         /** Send an email via Dynamics 365 */
-        const sendMail = async ({ sender, torecipient, subject, description }) => {
+        const createMail = async ({ sender, torecipient, subject, description }) => {
             try {
                 // Step 1: Create the email record
                 const emailRecord = {
@@ -286,9 +289,19 @@
 
                 const result = await WebApi.createRecord("email", emailRecord);
                 console.log(`Email created successfully. ID: ${result.id}`);
+                if (result.id) {
+                    await sendMail(result.id)
+                }
+            } catch (error) {
+                console.error("Failed to send email:", error.message ?? error);
+                throw error;
+            }
+        };
 
-                // Step 2: Send the email
-                const url = `${Utility.getGlobalContext().getClientUrl()}/api/data/v9.2/emails(${result.id})/Microsoft.Dynamics.CRM.SendEmail`;
+        const sendMail = async (mailId) => {
+
+            try {
+                const url = `${Utility.getGlobalContext().getClientUrl()}/api/data/v9.2/emails(${mailId})/Microsoft.Dynamics.CRM.SendEmail`;
                 const response = await fetch(url, {
                     method: "POST",
                     headers: {
@@ -304,9 +317,32 @@
 
                 console.log("Email sent successfully.");
                 return result;
-            } catch (error) {
+            } catch (er) {
                 console.error("Failed to send email:", error.message ?? error);
                 throw error;
+            }
+        }
+
+        const updateCustomerAgreementStatus = async () => {
+            try {
+                const entities = await fetchApprovements();
+                if (!entities || entities.length === 0) return;
+
+                const stateCode = Page.getAttribute("statecode");
+                const results = entities.map(e => e.pr_result);
+
+                if (results.includes("reject")) {
+                    stateCode.setValue(1);
+                    return;
+                }
+                const approvals = results.filter(r => r === "approve").length;
+                if (approvals >= 2) {
+                    stateCode.setValue(1); // Won
+                    return;
+                }
+                stateCode.setValue(1); // Active
+            } catch (err) {
+                console.error("Error retrieving approvements:", err);
             }
         };
 

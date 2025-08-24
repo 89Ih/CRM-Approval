@@ -1,3 +1,4 @@
+"use strict" // EC5
 const APPROVE_STATUS_FIELDS = ["pr_m1decision", "pr_m2decision"];
 const api = restService();
 
@@ -6,14 +7,9 @@ function onLoad(executionContext) {
     if (!formContext) return;
     generalValidation(formContext);
     const isValid = generalValidation(formContext);
-
     if (isValid) {
         handleAgreement(formContext);
-
-    } else {
-
-
-    }
+    } else { }
 }
 function onChange(executionContext) {
     const formContext = executionContext?.getFormContext?.();
@@ -24,9 +20,9 @@ function generalValidation(formContext) {
     const isInProcessing = APPROVE_STATUS_FIELDS.some((field) => {
         return formContext.getAttribute(field)?.getValue() !== null; // true
     });
-    const entryCompleted =
-        formContext.getAttribute("statecode")?.getValue() === 1; // entry completed
-    return !isInProcessing && entryCompleted ? true : false;
+    // const entryCompleted = formContext.getAttribute("statecode")?.getValue() === 1; 
+    // return !isInProcessing && entryCompleted ? true : false;
+    return !isInProcessing ? true : false;
 }
 function handleAgreement(formContext) {
     const agreementTypeAttr = formContext.getAttribute("pr_customeragreement");
@@ -62,21 +58,19 @@ async function getApproval(formContext) {
         : []
 }
 async function createApproval(formContext, approver) {
-    const OPEN = 125620000;
-    const id = getRecordId(formContext);
+
+    const currentRecordId = getRecordId(formContext);
     const entityName = formContext.data.entity.getEntityName();
     const jobTitle = formContext.getAttribute("pr_jobtitle")?.getValue();
-
+    const clientUrl = Xrm.Utility.getGlobalContext().getClientUrl();
     const data = {
         pr_name: jobTitle,
         pr_entitytraget: entityName,
-        pr_entitytragetguid: id,
-        "ownerid@odata.bind": `/systemusers(${approver})`
-
+        pr_entitytragetguid: currentRecordId,
+        "ownerid@odata.bind": `/systemusers(${approver})`,
+        pr_recordurl: `${clientUrl}/main.aspx?etn=${entityName}&id=${currentRecordId}&pagetype=entityrecord`
     };
-
     await api.create("pr_approvement", data);
-
 }
 async function updateReleaseStatus(formContext, stateKey) {
 
@@ -97,8 +91,6 @@ function createSecondApprove(formContext, approver1, approver2) {
     const entityName = formContext.data.entity.getEntityName();
     const jobTitle = formContext.getAttribute("pr_jobtitle")?.getValue();
     const clientUrl = Xrm.Utility.getGlobalContext().getClientUrl();
-
-
     const record1 = {
         pr_name: "Erste Freigabe - " + jobTitle,
         pr_entitytraget: entityName,
@@ -123,12 +115,7 @@ function createSecondApprove(formContext, approver1, approver2) {
         .catch(err => {
             console.error("Error creating record:", err);
         });
-
-
-
 }
-
-
 function getRecordId(formContext) {
     return formContext.data.entity.getId().replace(/[{}]/g, "").toLowerCase();
 }
@@ -138,7 +125,6 @@ function getLookupId(formContext, fieldName) {
         ? lookup[0].id.replace(/[{}]/g, "").toLowerCase()
         : null;
 }
-
 function getRecordUrl() {
     // Get entity name (logical name)
     var entityName = Xrm.Page.data.entity.getEntityName();
